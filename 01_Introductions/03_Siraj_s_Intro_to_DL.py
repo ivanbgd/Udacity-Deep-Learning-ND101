@@ -14,4 +14,6 @@ body_reg.fit(x_values, y_values)
 #visualize results
 plt.scatter(x_values, y_values)
 plt.plot(x_values, body_reg.predict(x_values), 'r')
+plt.xlabel('Brain weight')
+plt.ylabel('Body weight')
 plt.show()
