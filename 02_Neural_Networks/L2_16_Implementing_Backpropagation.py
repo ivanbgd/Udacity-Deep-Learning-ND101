@@ -23,8 +23,6 @@ weights_hidden_output = np.random.normal(loc = 0.0, scale = n_features**-.5, siz
 last_loss = None
 
 for epoch in range(n_epochs):
-    delta_w_i_h = np.zeros(weights_input_hidden.shape)                                                          # shape (6, 2)
-    delta_w_h_o = np.zeros(weights_hidden_output.shape)                                                         # shape (2,)
     hidden_input = np.dot(features, weights_input_hidden)                                                       # shape (360, 2)
     hidden_output = sigmoid(hidden_input)                                                                       # shape (360, 2)
     output_input = np.dot(hidden_output, weights_hidden_output)                                                 # shape (360,)
@@ -32,8 +30,8 @@ for epoch in range(n_epochs):
     error = targets - output_output                                                                             # shape (360,)
     output_error_term = error * output_output*(1 - output_output)                                               # shape (360,)
     hidden_error_term = np.dot(output_error_term[:, np.newaxis], weights_hidden_output[np.newaxis, :]) * hidden_output*(1 - hidden_output)    # shape (360, 2)
-    delta_w_i_h += np.dot(features.T, hidden_error_term)                                                        # shape (6, 2) - The gradient descent step, the error times the gradient times the inputs
-    delta_w_h_o += np.dot(output_error_term, hidden_output)                                                     # shape (2,) - The gradient descent step, the error times the gradient times the inputs
+    delta_w_i_h = np.dot(features.T, hidden_error_term)                                                        # shape (6, 2) - The gradient descent step, the error times the gradient times the inputs
+    delta_w_h_o = np.dot(output_error_term, hidden_output)                                                     # shape (2,) - The gradient descent step, the error times the gradient times the inputs
     weights_input_hidden += learn_rate * delta_w_i_h / n_records
     weights_hidden_output += learn_rate * delta_w_h_o / n_records
     mse = .5 * np.mean(np.square(error))                                                                        # shape (), that is, a scalar
@@ -56,3 +54,11 @@ print("Prediction accuracy: {:.3f}".format(accuracy))
 
 # Prediction accuracy: 0.725 Nice job! That's right!
 # Neural Network hyperparameters 3, 2000 and 1.005 give accuracy of 0.750.
+
+
+#print()
+#print('weights_input_hidden: ')
+#print(weights_input_hidden)
+#print('weights_hidden_output: ')
+#print(weights_hidden_output)
+
