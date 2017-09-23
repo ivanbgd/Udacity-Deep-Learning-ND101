@@ -722,9 +722,9 @@ void train_nn(const int n_hidden, const unsigned n_epochs, const double learn_ra
             last_loss = loss;
         }
 
-        print(delta_w_i_h, n_features, w_h_o_size);
-        print(delta_w_h_o, 1, w_i_h_cols);
-        break;
+        //print(delta_w_i_h, n_features, w_h_o_size);
+        //print(delta_w_h_o, 1, w_i_h_cols);
+        //break;
 
         free(delta_w_i_h);
         free(delta_w_h_o);
@@ -802,11 +802,12 @@ int main(int argc, char *argv[]) {
     /* Intializes random number generator */
     time_t t;
     srand((unsigned)time(&t));
+    //srand(21);
 
     /* Neural Network hyperparameters */
-    const unsigned n_hidden = 2;        // Number of hidden units. There is only one hidden layer.
-    const unsigned n_epochs = 900;
-    const double learn_rate = .005;     // Eta
+    const unsigned n_hidden = 6;        // Number of hidden units. There is only one hidden layer.
+    const unsigned n_epochs = 1000;
+    const double learn_rate = 1.005;     // Eta
 
     /* Features are inputs to our NN, and there's 6 of them.
      * We have 360 train data points (records).
@@ -847,4 +848,6 @@ int main(int argc, char *argv[]) {
 }
 
 #endif  // BACKPROPAGATION_V_0_1
+
+// Neural Network hyperparameters 5-6, 1000-2000 and 1.005 give accuracy of 0.750, even with normal_clt.
 
