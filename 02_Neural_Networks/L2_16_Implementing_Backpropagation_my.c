@@ -52,7 +52,7 @@ void normal_clt(const double mean, const double std, double *arr, const unsigned
     }
 }
 
-/* Normal (Gaussian) distribution - Box–Muller transform */
+/* Normal (Gaussian) distribution - Boxâ€“Muller transform */
 void normal_box_muller(const double mean, const double std, double *arr, const unsigned length) {
     const double two_pi = 8.0 * atan(1.0);
     double x1;
