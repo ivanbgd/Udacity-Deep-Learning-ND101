@@ -5,6 +5,8 @@
  * That means they are contiguous in memory, flat arrays.
  * Minimum dimension is 1, not 0, and internal dimensions must match. */
 
+ /* Assumes a Neural network with only one hidden layer. */
+
 #define BACKPROPAGATION_V_0_1
 #ifdef BACKPROPAGATION_V_0_1
 
@@ -572,7 +574,10 @@ void print(const double *m, const unsigned n_rows_m, const unsigned n_cols_m) {
 }
 
 /* Reads inputs to NN from a text file, for training it or testing it,
-   and returns them as an array of doubles of n_records * n_features size. */
+   and returns them as an array of doubles of n_records * n_features size.
+   Creates the array.
+   n_records is the number of the training or testing pairs (input, correct output).
+   n_features is the number of inputs to the NN. */
 double *read_features(const char *file_name, const unsigned n_records, const unsigned n_features) {
     double *features = malloc(n_records * n_features * sizeof(*features));
     if (features == NULL) {
@@ -611,9 +616,12 @@ double *read_features(const char *file_name, const unsigned n_records, const uns
 }
 
 /* Reads targets for NN from a text file, for training it or testing it,
-   and returns them as an array of doubles of n_records size. */
-double *read_targets(const char *file_name, const unsigned n_records) {
-    double *targets = malloc(n_records * sizeof(*targets));
+   and returns them as an array of doubles of n_records size.
+   Creates the array.
+   n_records is the number of the training or testing pairs (input, correct output).
+   n_outputs is the number of outputs from the NN. */
+double *read_targets(const char *file_name, const unsigned n_records, const unsigned n_outputs) {
+    double *targets = malloc(n_records * n_outputs * sizeof(*targets));
     if (targets == NULL) {
         printf("Couldn't allocate memory!\n");
         system("pause");
@@ -628,14 +636,14 @@ double *read_targets(const char *file_name, const unsigned n_records) {
         exit(-3);
     }
 
-    for (size_t i = 0; i < n_records; i++) {
+    for (size_t i = 0; i < n_records * n_outputs; i++) {
         fscanf(file, "%lf", &targets[i]);
     }
 
     /* Visual validation */
     const int validate = 0;
     if (validate) {
-        for (size_t i = 0; i < n_records; ) {
+        for (size_t i = 0; i < n_records * n_outputs; ) {
             printf("%1.0f\n", targets[i++]);
         }
         printf("\n");
@@ -646,9 +654,15 @@ double *read_targets(const char *file_name, const unsigned n_records) {
     return targets;
 }
 
-/* Trains the NN. */
-void train_nn(const int n_hidden, const unsigned n_epochs, const double learn_rate, const unsigned n_records, const unsigned n_features,\
-    double *weights_input_hidden, const unsigned w_i_h_rows, const unsigned w_i_h_cols, double *weights_hidden_output, const unsigned w_h_o_size) {
+/* Trains the NN.
+ * n_records is the number of the training pairs (input, correct output).
+ * n_features is the number of inputs to the NN, and it's the same thing as w_i_h_rows.
+ * w_i_h_cols is the number of units in the hidden layer, and it's the same as w_h_o_rows.
+ * w_h_o_cols is the number of output units, in the only output layer. */
+void train_nn(const unsigned n_epochs, const double learn_rate, \
+    const unsigned n_records, const unsigned n_features, \
+    double *weights_input_hidden, const unsigned w_i_h_rows, const unsigned w_i_h_cols, \
+    double *weights_hidden_output, const unsigned w_h_o_rows, const unsigned w_h_o_cols) {
 
     /* For measuring time */
     clock_t t0, t1;
@@ -661,12 +675,14 @@ void train_nn(const int n_hidden, const unsigned n_epochs, const double learn_ra
     double *targets = NULL;                                                             // shape (360,)
 
     features = read_features("features.txt", n_records, n_features);
-    targets = read_targets("targets.txt", n_records);
+    targets = read_targets("targets.txt", n_records, w_h_o_cols);
 
     t0 = clock();
 
     /* This would be faster on stack, but it wouldn't fit on stack in case of
-     * large NNs and/or large data sets. */
+     * large NNs and/or large data sets. Of course, this code can be sped up
+     * by calculating sizes only once, and storing them in variables. */
+
     for (size_t epoch = 0; epoch < n_epochs; epoch++) {
         double *delta_w_i_h = NULL;         // shape (6, 2)
         double *delta_w_h_o = NULL;         // shape (2,)
@@ -683,32 +699,39 @@ void train_nn(const int n_hidden, const unsigned n_epochs, const double learn_ra
 
         hidden_input = dot(features, n_records, n_features, weights_input_hidden, w_i_h_rows, w_i_h_cols);
         hidden_output = sigmoid(hidden_input, n_records * w_i_h_cols);
-        output_input = dot(hidden_output, n_records, w_i_h_cols, weights_hidden_output, w_h_o_size, 1);
-        output_output = sigmoid(output_input, n_records * 1);
-        error = subtract_arrays(targets, n_records, output_output, n_records);
-        tmp1 = subtract_arrays(&one, 0, output_output, n_records);
-        tmp2 = multiply_arrays(output_output, n_records, tmp1, n_records);
+
+        output_input = dot(hidden_output, n_records, w_i_h_cols, weights_hidden_output, w_h_o_rows, w_h_o_cols);
+        output_output = sigmoid(output_input, n_records * w_h_o_cols);
+
+        error = subtract_arrays(targets, n_records * w_h_o_cols, output_output, n_records * w_h_o_cols);
+
+        tmp1 = subtract_arrays(&one, 0, output_output, n_records * w_h_o_cols);
+        tmp2 = multiply_arrays(output_output, n_records * w_h_o_cols, tmp1, n_records * w_h_o_cols);
+        output_error_term = multiply_arrays(error, n_records * w_h_o_cols, tmp2, n_records * w_h_o_cols);
+        
         free(tmp1);
-        output_error_term = multiply_arrays(error, n_records, tmp2, n_records);
         free(tmp2);
         tmp1 = subtract_arrays(&one, 0, hidden_output, n_records * w_i_h_cols);
         tmp2 = multiply_arrays(hidden_output, n_records * w_i_h_cols, tmp1, n_records * w_i_h_cols);
         free(tmp1);
-        tmp1 = dot(output_error_term, n_records, 1, weights_hidden_output, 1, w_h_o_size);
-        hidden_error_term = multiply_arrays(tmp1, n_records * w_h_o_size, tmp2, n_records * w_h_o_size);
+        tmp1 = dot(output_error_term, n_records, w_h_o_cols, weights_hidden_output, w_h_o_cols, w_h_o_rows);
+        hidden_error_term = multiply_arrays(tmp1, n_records * w_h_o_rows, tmp2, n_records * w_i_h_cols);
+        
         free(tmp1);
         tmp1 = transpose(features, n_records, n_features);
-        delta_w_i_h = dot(tmp1, n_features, n_records, hidden_error_term, n_records, w_h_o_size);       // The gradient descent step, the error times the gradient times the inputs
-        delta_w_h_o = dot(output_error_term, 1, n_records, hidden_output, n_records, w_i_h_cols);       // The gradient descent step, the error times the gradient times the inputs
+        delta_w_i_h = dot(tmp1, n_features, n_records, hidden_error_term, n_records, w_h_o_rows);               // The gradient descent step, the error times the gradient times the inputs
+        delta_w_h_o = dot(output_error_term, w_h_o_cols, n_records, hidden_output, n_records, w_i_h_cols);      // The gradient descent step, the error times the gradient times the inputs
+        
         free(tmp1);
-        tmp1 = multiply_arrays(&learn_rate_over_n_records, 0, delta_w_i_h, n_features * w_h_o_size);
-        weights_input_hidden = add_update(weights_input_hidden, w_i_h_rows * w_i_h_cols, tmp1, n_features * w_h_o_size);
+        tmp1 = multiply_arrays(&learn_rate_over_n_records, 0, delta_w_i_h, n_features * w_h_o_rows);
+        weights_input_hidden = add_update(weights_input_hidden, w_i_h_rows * w_i_h_cols, tmp1, n_features * w_h_o_rows);
         free(tmp1);
-        tmp1 = multiply_arrays(&learn_rate_over_n_records, 0, delta_w_h_o, w_i_h_cols);
-        weights_hidden_output = add_update(weights_hidden_output, w_h_o_size, tmp1, w_i_h_cols);
+        tmp1 = multiply_arrays(&learn_rate_over_n_records, 0, delta_w_h_o, w_h_o_cols * w_i_h_cols);
+        weights_hidden_output = add_update(weights_hidden_output, w_h_o_rows * w_h_o_cols, tmp1, w_h_o_cols * w_i_h_cols);
+        
         free(tmp2);
-        tmp2 = multiply_arrays(error, n_records, error, n_records);
-        mse = .5 * mean(tmp2, n_records);
+        tmp2 = multiply_arrays(error, n_records * w_h_o_cols, error, n_records * w_h_o_cols);
+        mse = .5 * mean(tmp2, n_records * w_h_o_cols);
 
         // Printing out the mean square error on the training set
         if (epoch % (n_epochs / 10) == 0) {
@@ -722,8 +745,8 @@ void train_nn(const int n_hidden, const unsigned n_epochs, const double learn_ra
             last_loss = loss;
         }
 
-        //print(delta_w_i_h, n_features, w_h_o_size);
-        //print(delta_w_h_o, 1, w_i_h_cols);
+        //print(delta_w_i_h, w_i_h_rows, w_i_h_cols);
+        //print(delta_w_h_o, w_h_o_rows, w_h_o_cols);
         //break;
 
         free(delta_w_i_h);
@@ -747,10 +770,14 @@ void train_nn(const int n_hidden, const unsigned n_epochs, const double learn_ra
     free(targets);
 }
 
-/* Calculates accuracy on test data. */
-double test_nn(const unsigned n_records, const unsigned n_features,\
-    const double *weights_input_hidden, const unsigned w_i_h_rows, const unsigned w_i_h_cols,\
-    const double *weights_hidden_output, const unsigned w_h_o_size) {
+/* Calculates accuracy on test data.
+ * n_records is the number of the testing pairs (input, correct output).
+ * n_features is the number of inputs to the NN, and it's the same thing as w_i_h_rows.
+ * w_i_h_cols is the number of units in the hidden layer, and it's the same as w_h_o_rows.
+ * w_h_o_cols is the number of output units, in the only output layer. */
+double test_nn(const unsigned n_records, const unsigned n_features, \
+    const double *weights_input_hidden, const unsigned w_i_h_rows, const unsigned w_i_h_cols, \
+    const double *weights_hidden_output, const unsigned w_h_o_rows, const unsigned w_h_o_cols) {
     
     /* For measuring time */
     clock_t t0, t1;
@@ -758,11 +785,11 @@ double test_nn(const unsigned n_records, const unsigned n_features,\
 
     const double one_half = 0.5;
     double accuracy = 0.0;
-    double *features_test = NULL;
-    double *targets_test = NULL;
+    double *features_test = NULL;       // shape (40, 2)
+    double *targets_test = NULL;        // shape (40,)
 
     features_test = read_features("features_test.txt", n_records, n_features);
-    targets_test = read_targets("targets_test.txt", n_records);
+    targets_test = read_targets("targets_test.txt", n_records, w_h_o_cols);
 
     t0 = clock();
 
@@ -775,11 +802,14 @@ double test_nn(const unsigned n_records, const unsigned n_features,\
 
     hidden_input = dot(features_test, n_records, n_features, weights_input_hidden, w_i_h_rows, w_i_h_cols);
     hidden_output = sigmoid(hidden_input, n_records * w_i_h_cols);
-    output_input = dot(hidden_output, n_records, w_i_h_cols, weights_hidden_output, w_h_o_size, 1);
-    output_output = sigmoid(output_input, n_records * 1);
-    predictions = greater_than(output_output, n_records, &one_half, 0);
-    tmp = equal(predictions, n_records, targets_test, n_records);
-    accuracy = mean(tmp, n_records);
+
+    output_input = dot(hidden_output, n_records, w_i_h_cols, weights_hidden_output, w_h_o_rows, w_h_o_cols);
+    output_output = sigmoid(output_input, n_records * w_h_o_cols);
+    
+    predictions = greater_than(output_output, n_records * w_h_o_cols, &one_half, 0);
+    
+    tmp = equal(predictions, n_records * w_h_o_cols, targets_test, n_records * w_h_o_cols);
+    accuracy = mean(tmp, n_records * w_h_o_cols);
 
     free(hidden_input);
     free(hidden_output);
@@ -806,14 +836,15 @@ int main(int argc, char *argv[]) {
 
     /* Neural Network hyperparameters */
     const unsigned n_hidden = 2;        // Number of hidden units. There is only one hidden layer.
+    const unsigned n_output = 1;        // Number of output units, in the only output layer.
     const unsigned n_epochs = 900;
     const double learn_rate = .005;     // Eta
 
     /* Features are inputs to our NN, and there's 6 of them.
      * We have 360 train data points (records).
      * We also have 40 test points (records). */
-    const unsigned n_records = 360;
     const unsigned n_features = 6;
+    const unsigned n_train = 360;
     const unsigned n_test = 40;
 
     /* Function pointer to Normal distribution functions */
@@ -821,7 +852,7 @@ int main(int argc, char *argv[]) {
 
     /* Initial weights - They should be small and random, around 0, so that inputs are in the linear region of the sigmoid. */
     double *weights_input_hidden = malloc(n_features * n_hidden * sizeof(*weights_input_hidden));       // shape (6, 2)
-    double *weights_hidden_output = malloc(n_hidden * sizeof(*weights_hidden_output));                  // shape (2,)
+    double *weights_hidden_output = malloc(n_hidden * n_output * sizeof(*weights_hidden_output));       // shape (2,)
     if (!weights_input_hidden || !weights_hidden_output) {
         printf("Couldn't allocate memory!\n");
         exit(-1);
@@ -829,8 +860,8 @@ int main(int argc, char *argv[]) {
     fp(0.0, 1. / sqrt(n_features), weights_input_hidden, n_features*n_hidden);
     fp(0.0, 1. / sqrt(n_features), weights_hidden_output, n_hidden);
 
-    train_nn(n_hidden, n_epochs, learn_rate, n_records, n_features, weights_input_hidden, n_features, n_hidden, weights_hidden_output, n_hidden);
-    double accuracy = test_nn(n_test, n_features, weights_input_hidden, n_features, n_hidden, weights_hidden_output, n_hidden);
+    train_nn(n_epochs, learn_rate, n_train, n_features, weights_input_hidden, n_features, n_hidden, weights_hidden_output, n_hidden, n_output);
+    double accuracy = test_nn(n_test, n_features, weights_input_hidden, n_features, n_hidden, weights_hidden_output, n_hidden, n_output);
 
     printf("Prediction accuracy: %.3f\n", accuracy);
 
@@ -838,7 +869,7 @@ int main(int argc, char *argv[]) {
     printf("weights_input_hidden: \n");
     print(weights_input_hidden, n_features, n_hidden);
     printf("weights_hidden_output: \n");
-    print(weights_hidden_output, 1, n_hidden);
+    print(weights_hidden_output, n_hidden, n_output);
 
     free(weights_hidden_output);
     free(weights_input_hidden);
@@ -849,5 +880,5 @@ int main(int argc, char *argv[]) {
 
 #endif  // BACKPROPAGATION_V_0_1
 
-// Neural Network hyperparameters 5-6, 1000-2000 and 1.005 give accuracy of 0.750, even with normal_clt.
-// Default values of 2, 900, .005 give accuracy of 0.650.
+// Neural Network hyperparameters 5-6, 1, 1000-2000 and 1.005 give accuracy of 0.750, even with normal_clt.
+// Default values of 2, 1, 900, .005 give accuracy of 0.650.
